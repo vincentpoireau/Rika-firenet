@@ -25,5 +25,5 @@ jobs:
           RIKA_EMAIL: ${{ secrets.RIKA_EMAIL }}
           RIKA_PASSWORD: ${{ secrets.RIKA_PASSWORD }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: python rika.py
+        run: python backend/rika.py
         
