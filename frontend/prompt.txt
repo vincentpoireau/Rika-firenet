@@ -1,0 +1,55 @@
+Je souhaiterais créer une application web qui trace des graphiques liés à mon poêle, la température de la pièce, la consigne, si le poêle marche ou pas, la consommation de pellets par jour, par semaine, par mois.
+Cette page doit être d'un style moderne, et consultable aussi bien sur ordinateur que sur téléphone.
+
+Tout d'abord, en haut de la page il faut afficher la température actuelle et la consigne, et si le poêle est en fonctionnement ou pas
+Il faut aussi afficher l'heure de la dernière mise à jour
+
+Les graphiques doivent se remplir au fur et à mesure du temps, en ayant tout l'historique. L'axe des temps doit être être proportionnel au temps, et doit aussi préciser la date du jour.
+
+- Sur le premier graphique, je veux voir la 1) température de la pièce, 2) la consigne, 3) si le poêle marche (en rajoutant une zone colorée sur le graphe s'il fonctionne), et 4) la météo à Seynod, le tout en fonction du temps
+- sur le deuxième graphique, je veux voir la consommation de pellets par jour, ainsi que le nombre d'heure de fonctionnement par jour (de minuit à minuit)
+- sur le troisème graphique, je veux voir la consommation de pellets par semaine, ainsi que le nombre d'heure de fonctionnement par semaine (semaine civile)
+- sur le quatrième graphique, je veux voir la consommation de pellets par mois, ainsi que le nombre d'heure de fonctionnement par mois (mois de l'année)
+
+Sur le premier graphique, je voudrais des boutons cliquable "24h, 7 jours, 30 jours, tout" afin d'afficher les 24 dernières heures, les 7 derniers jours, les 30 derniers jours, et la totalité des données.
+
+Un script python tourne en continu et alimente une base de données Firebase. L'accès à cette base de données se fait grâce à ce bout de code :
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+const firebaseConfig = {
+  apiKey: "AIzaSyD9qxoLbHD8d-ZiJnFgTVPZIbo1hgZ40Sw",
+  authDomain: "rika-domo.firebaseapp.com",
+  projectId: "rika-domo",
+  storageBucket: "rika-domo.firebasestorage.app",
+  messagingSenderId: "142029259326",
+  appId: "1:142029259326:web:5199fd9385018644ad876f",
+  measurementId: "G-CZTJFGEBY9"
+};
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+
+Ensuite la structure de la base de données est la suivante :
+data = {
+                'temperature': float(room_temperature),
+                'thermostat': float(thermostat),
+                'is_burning': is_burning,
+                'consumption': float(consumption),
+                'timestamp': firestore.SERVER_TIMESTAMP
+                }
+db.collection('stove').add(data)
+
+La variable temperature donne la température de la salle.
+La variable thermostat donne la valeur de la consigne.
+La variable is_burning donne l'état du poêle (s'il fonctionne ou pas)
+La variable consumption donne la consommation totale de pellets en kilogramme. Il faut donc faire des calculs pour obtenir la consommation par jour, par semaine et par mois.
+Le chemin vers la base de données est donc simplement "stove"
+Connecte toi de façon anonyme à cette base de données
+
+Je veux ensuite déployer cette page web sur Firebase, en gardant exactement le même style. Il faut que tu partages avec moi tous les fichiers qui permettent l'affichage de la page web, le fichier principal,
+les fichiers de style, etc.
+
+Je te laisse donc créer cette page web pour mon poêle.
+
