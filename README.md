@@ -59,7 +59,6 @@ npm install
 npm install firebase chart.js react-chartjs-2 lucide-react
 firebase login
 firebase init hosting
-firebase init hosting
 * Choose : *Use an existing project*.
 * Select the right project : eg, `rika-domo`.
 * Public directory : `dist` (if using Vite).

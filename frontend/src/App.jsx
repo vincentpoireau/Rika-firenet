@@ -227,7 +227,7 @@ export default function App() {
 
         <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Rika Domo</h1>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Rika Firenet</h1>
             <p className="text-slate-500 flex items-center gap-2 text-sm font-semibold uppercase tracking-tighter">
                <ShieldCheck className="w-4 h-4 text-emerald-500" /> Seynod, France
             </p>
@@ -251,7 +251,7 @@ export default function App() {
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <h3 className="text-sm font-black flex items-center gap-2 text-slate-700 uppercase italic tracking-tight">
-                <Thermometer className="w-4 h-4 text-rose-500" /> Analyse Thermique Int/Ext
+                <Thermometer className="w-4 h-4 text-rose-500" /> Températures
               </h3>
               
               <div className="flex items-center bg-slate-100 p-1 rounded-xl">
@@ -370,7 +370,7 @@ function StatsGraph({ title, data }) {
             labels: data.map(d => d.label),
             datasets: [
               {
-                label: 'Pellets (KG)',
+                label: 'Pellets (kg)',
                 data: data.map(d => d.consumption),
                 backgroundColor: 'rgba(251, 146, 60, 0.7)',
                 borderRadius: 4,
@@ -378,7 +378,7 @@ function StatsGraph({ title, data }) {
               },
               {
                 type: 'line',
-                label: 'Marche (H)',
+                label: 'Fonctionnement (h)',
                 data: data.map(d => d.runtime),
                 borderColor: '#3b82f6',
                 borderWidth: 2,
