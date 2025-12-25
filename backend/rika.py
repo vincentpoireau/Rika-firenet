@@ -34,6 +34,19 @@ def get_room_temperature(data): return data['sensors']['inputRoomTemperature']
 def is_stove_burning(data):
     return data['sensors']['statusMainState'] in [4, 5]
 
+# --- FONCTION POUR RÉCUPÉRER LA TEMPÉRATURE EXTERNE VIA OPEN-METEO ---
+def get_external_weather():
+    """Récupère la température actuelle à Seynod via Open-Meteo"""
+    try:
+        # Latitude/Longitude pour Seynod (45.88, 6.10)
+        url = "https://api.open-meteo.com/v1/forecast?latitude=45.88&longitude=6.10&current_weather=true"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        return data['current_weather']['temperature']
+    except Exception as e:
+        print(f"Erreur récupération météo : {e}")
+        return None
+
 # --- MAIN ADAPTÉ POUR GITHUB ACTIONS ---
 
 if __name__ == "__main__":
@@ -70,6 +83,12 @@ if __name__ == "__main__":
         thermostat = get_stove_thermostat(stove_infos)
         consumption_kg = get_stove_consumption_kg(stove_infos)
         consumption_h = get_stove_consumption_h(stove_infos)
+        # Récupération de la météo extérieure (Seynod)
+        ext_temp = get_external_weather()
+        if ext_temp is not None:
+            print(f"Température extérieure actuelle à Seynod : {ext_temp}°C")
+        else:
+            print("Impossible de récupérer la température extérieure.")
 
         data = {
             'temperature': float(room_temp),
@@ -77,11 +96,12 @@ if __name__ == "__main__":
             'is_burning': is_burning,
             'consumption_kg': float(consumption_kg),
             'consumption_h': float(consumption_h),
+            'temperature_ext': float(ext_temp) if ext_temp is not None else None,
             'timestamp': firestore.SERVER_TIMESTAMP
         }
 
         db.collection('stove').add(data)
-        print(f"Succès : Données envoyées ({room_temp}°C).")
+        print(f"Succès : Poêle {room_temp}°C, Extérieur {ext_temp}°C envoyé.")
     else:
         print("Erreur : Impossible de trouver le poêle.")
         sys.exit(1)
