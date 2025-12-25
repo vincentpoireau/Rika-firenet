@@ -9,8 +9,6 @@ from bs4 import BeautifulSoup
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# --- FONCTIONS EXISTANTES (connect, get_stove_informations, etc.) ---
-# (Gardez toutes vos fonctions au début du fichier comme dans l'original)
 
 def connect(client, url_base, url_login, url_stove, user, pwd):
     # ... (votre code existant)
@@ -29,7 +27,8 @@ def get_stove_informations(client, url_base, url_api, stove):
     r = client.get(url_base + url_api + stove + '/status?nocache=')
     return r.json()
 
-def get_stove_consumption(data): return data['sensors']['parameterFeedRateTotal']
+def get_stove_consumption_kg(data): return data['sensors']['parameterFeedRateTotal']
+def get_stove_consumption_h(data): return data['sensors']['parameterRuntimePellets']
 def get_stove_thermostat(data): return data['controls']['targetTemperature']
 def get_room_temperature(data): return data['sensors']['inputRoomTemperature']
 def is_stove_burning(data):
@@ -69,13 +68,15 @@ if __name__ == "__main__":
         room_temp = get_room_temperature(stove_infos)
         is_burning = is_stove_burning(stove_infos)
         thermostat = get_stove_thermostat(stove_infos)
-        consumption = get_stove_consumption(stove_infos)
+        consumption_kg = get_stove_consumption_kg(stove_infos)
+        consumption_h = get_stove_consumption_h(stove_infos)
 
         data = {
             'temperature': float(room_temp),
             'thermostat': float(thermostat),
             'is_burning': is_burning,
-            'consumption': float(consumption),
+            'consumption_kg': float(consumption_kg),
+            'consumption_h': float(consumption_h),
             'timestamp': firestore.SERVER_TIMESTAMP
         }
 
