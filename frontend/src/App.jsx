@@ -56,7 +56,6 @@ const auth = getAuth(app);
 
 export default function App() {
   const [logs, setLogs] = useState([]);
-  const [weatherData, setWeatherData] = useState({});
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -68,29 +67,6 @@ export default function App() {
     signInAnonymously(auth).catch(err => setError(`Erreur Auth : ${err.message}`));
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => u && setUser(u));
     return () => unsubscribeAuth();
-  }, []);
-
-  // Récupération des données Météo de Seynod via Open-Meteo
-  // Latitude: 45.88, Longitude: 6.10 (Seynod)
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        const response = await fetch('https://api.open-meteo.com/v1/forecast?latitude=45.88&longitude=6.10&hourly=temperature_2m&past_days=7');
-        const data = await response.json();
-        
-        // On crée un dictionnaire de correspondance [ISO_Date_Hour] -> Température
-        const mapping = {};
-        if (data.hourly && data.hourly.time) {
-          data.hourly.time.forEach((time, index) => {
-            mapping[time] = data.hourly.temperature_2m[index];
-          });
-        }
-        setWeatherData(mapping);
-      } catch (err) {
-        console.error("Erreur météo:", err);
-      }
-    };
-    fetchWeather();
   }, []);
 
   // Récupération des données Firestore
@@ -111,6 +87,8 @@ export default function App() {
             temperature: Number(d.temperature) || 0,
             thermostat: Number(d.thermostat) || 0,
             consumption: Number(d.consumption) || 0,
+            // Utilisation de la variable temperature_ext de la base de données
+            ext_temp: d.temperature_ext !== undefined ? Number(d.temperature_ext) : null,
             is_burning: Boolean(d.is_burning)
           };
         });
@@ -123,34 +101,22 @@ export default function App() {
     return () => unsubscribeData();
   }, [user]);
 
-  // Données filtrées et enrichies avec la météo
-  const enrichedLogs = useMemo(() => {
-    let base = logs;
-    if (timeRange !== 'all' && logs.length > 0) {
-      const now = new Date();
-      let startTime = new Date();
-      if (timeRange === '24h') startTime.setHours(now.getHours() - 24);
-      else if (timeRange === '7d') startTime.setDate(now.getDate() - 7);
-      else if (timeRange === '30d') startTime.setDate(now.getDate() - 30);
-      base = logs.filter(log => log.date >= startTime);
-    }
-
-    return base.map(log => {
-      // On arrondit à l'heure la plus proche pour matcher avec l'API météo
-      const dateIso = log.date.toISOString().slice(0, 13) + ":00"; 
-      return {
-        ...log,
-        ext_temp: weatherData[dateIso] ?? null
-      };
-    });
-  }, [logs, timeRange, weatherData]);
+  // Données filtrées
+  const filteredLogs = useMemo(() => {
+    if (timeRange === 'all' || logs.length === 0) return logs;
+    const now = new Date();
+    let startTime = new Date();
+    if (timeRange === '24h') startTime.setHours(now.getHours() - 24);
+    else if (timeRange === '7d') startTime.setDate(now.getDate() - 7);
+    else if (timeRange === '30d') startTime.setDate(now.getDate() - 30);
+    return logs.filter(log => log.date >= startTime);
+  }, [logs, timeRange]);
 
   // Calcul des limites d'échelle dynamique
   const tempLimits = useMemo(() => {
-    const dataToScale = enrichedLogs.length > 0 ? enrichedLogs : logs;
-    if (dataToScale.length === 0) return { min: 0, max: 30 };
+    if (filteredLogs.length === 0) return { min: 0, max: 30 };
     
-    const allValues = dataToScale.flatMap(l => {
+    const allValues = filteredLogs.flatMap(l => {
         const vals = [l.temperature, l.thermostat];
         if (l.ext_temp !== null) vals.push(l.ext_temp);
         return vals;
@@ -160,7 +126,7 @@ export default function App() {
       min: Math.floor(Math.min(...allValues)) - 1,
       max: Math.ceil(Math.max(...allValues)) + 1
     };
-  }, [enrichedLogs, logs]);
+  }, [filteredLogs]);
 
   // Agrégation des statistiques
   const stats = useMemo(() => {
@@ -203,13 +169,13 @@ export default function App() {
     };
   }, [logs]);
 
-  const latest = enrichedLogs.length > 0 ? enrichedLogs[enrichedLogs.length - 1] : (logs.length > 0 ? logs[logs.length-1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), ext_temp: null });
+  const latest = filteredLogs.length > 0 ? filteredLogs[filteredLogs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), ext_temp: null };
 
   if (loading && !error) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 text-white gap-4">
         <RefreshCw className="animate-spin w-8 h-8 text-orange-500" />
-        <p className="font-bold tracking-widest uppercase text-sm italic">Fusion des données météo de Seynod...</p>
+        <p className="font-bold tracking-widest uppercase text-sm italic">Chargement des données...</p>
       </div>
     );
   }
@@ -242,7 +208,7 @@ export default function App() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard title="Intérieur" value={`${latest.temperature.toFixed(1)}°C`} icon={Thermometer} color="rose" />
-          <StatCard title="Extérieur (Seynod)" value={latest.ext_temp !== null ? `${latest.ext_temp.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
+          <StatCard title="Extérieur" value={latest.ext_temp !== null ? `${latest.ext_temp.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
           <StatCard title="Consigne" value={`${latest.thermostat.toFixed(1)}°C`} icon={Target} color="slate" />
           <StatCard title="Flamme" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
         </div>
@@ -275,7 +241,7 @@ export default function App() {
             <div className="h-[450px]">
               <Line 
                 data={{
-                  labels: enrichedLogs.map(l => l.date.toLocaleString('fr-FR', { 
+                  labels: filteredLogs.map(l => l.date.toLocaleString('fr-FR', { 
                     day: timeRange === '24h' ? undefined : '2-digit', 
                     month: timeRange === '24h' ? undefined : '2-digit', 
                     hour: '2-digit', 
@@ -284,7 +250,7 @@ export default function App() {
                   datasets: [
                     { 
                       label: 'Intérieur', 
-                      data: enrichedLogs.map(l => l.temperature), 
+                      data: filteredLogs.map(l => l.temperature), 
                       borderColor: '#f43f5e', 
                       borderWidth: 3,
                       backgroundColor: 'transparent',
@@ -293,8 +259,8 @@ export default function App() {
                       yAxisID: 'y'
                     },
                     { 
-                      label: 'Extérieur (Seynod)', 
-                      data: enrichedLogs.map(l => l.ext_temp), 
+                      label: 'Extérieur', 
+                      data: filteredLogs.map(l => l.ext_temp), 
                       borderColor: '#94a3b8', 
                       borderWidth: 2,
                       backgroundColor: 'rgba(148, 163, 184, 0.1)',
@@ -305,7 +271,7 @@ export default function App() {
                     },
                     { 
                       label: 'Consigne', 
-                      data: enrichedLogs.map(l => l.thermostat), 
+                      data: filteredLogs.map(l => l.thermostat), 
                       borderColor: '#3b82f6', 
                       borderDash: [5, 5], 
                       borderWidth: 1.5,
@@ -315,7 +281,7 @@ export default function App() {
                     },
                     {
                       label: 'Chauffe active',
-                      data: enrichedLogs.map(l => l.is_burning ? tempLimits.max : tempLimits.min), 
+                      data: filteredLogs.map(l => l.is_burning ? tempLimits.max : tempLimits.min), 
                       backgroundColor: 'rgba(251, 146, 60, 0.08)',
                       fill: 'origin',
                       pointRadius: 0,
