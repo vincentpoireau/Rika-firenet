@@ -41,6 +41,7 @@ Secret : Copiez et collez l'intégralité du contenu du fichier .json que vous a
 ## Frontend
 
 The frontend has been developped with Gemini 3 AI. Many iterations have been needed to get exactly the desired result.
+All the interesting code is located in src/App.jsx.
 
 The file src/App.jsx needs to know how to access the Firestore database: the information is given in the variable firebaseConfig.
 

@@ -87,8 +87,8 @@ export default function App() {
             temperature: Number(d.temperature) || 0,
             thermostat: Number(d.thermostat) || 0,
             consumption: Number(d.consumption) || 0,
-            // Utilisation de la variable temperature_ext de la base de données
-            ext_temp: d.temperature_ext !== undefined ? Number(d.temperature_ext) : null,
+            // Récupération directe depuis la base de données
+            temperature_ext: d.temperature_ext !== undefined ? Number(d.temperature_ext) : null,
             is_burning: Boolean(d.is_burning)
           };
         });
@@ -118,7 +118,7 @@ export default function App() {
     
     const allValues = filteredLogs.flatMap(l => {
         const vals = [l.temperature, l.thermostat];
-        if (l.ext_temp !== null) vals.push(l.ext_temp);
+        if (l.temperature_ext !== null) vals.push(l.temperature_ext);
         return vals;
     });
     
@@ -169,7 +169,7 @@ export default function App() {
     };
   }, [logs]);
 
-  const latest = filteredLogs.length > 0 ? filteredLogs[filteredLogs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), ext_temp: null };
+  const latest = filteredLogs.length > 0 ? filteredLogs[filteredLogs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), temperature_ext: null };
 
   if (loading && !error) {
     return (
@@ -208,7 +208,7 @@ export default function App() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard title="Intérieur" value={`${latest.temperature.toFixed(1)}°C`} icon={Thermometer} color="rose" />
-          <StatCard title="Extérieur" value={latest.ext_temp !== null ? `${latest.ext_temp.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
+          <StatCard title="Extérieur" value={latest.temperature_ext !== null ? `${latest.temperature_ext.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
           <StatCard title="Consigne" value={`${latest.thermostat.toFixed(1)}°C`} icon={Target} color="slate" />
           <StatCard title="Flamme" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
         </div>
@@ -260,7 +260,8 @@ export default function App() {
                     },
                     { 
                       label: 'Extérieur', 
-                      data: filteredLogs.map(l => l.ext_temp), 
+                      // Utilisation directe de la donnée Firestore
+                      data: filteredLogs.map(l => l.temperature_ext), 
                       borderColor: '#94a3b8', 
                       borderWidth: 2,
                       backgroundColor: 'rgba(148, 163, 184, 0.1)',
@@ -281,9 +282,10 @@ export default function App() {
                     },
                     {
                       label: 'Chauffe active',
-                      data: filteredLogs.map(l => l.is_burning ? tempLimits.max : tempLimits.min), 
+                      data: filteredLogs.map(l => l.is_burning ? tempLimits.max : -50), 
                       backgroundColor: 'rgba(251, 146, 60, 0.08)',
-                      fill: 'origin',
+                      // CORRECTION ICI : 'start' pour remplir jusqu'au bas du graphique
+                      fill: 'start',
                       pointRadius: 0,
                       borderWidth: 0,
                       tension: 0,
@@ -306,8 +308,11 @@ export default function App() {
                   },
                   plugins: {
                     legend: { position: 'top', align: 'end', labels: { usePointStyle: true, font: { size: 10, weight: 'bold' } } },
-                    tooltip: { mode: 'index', intersect: false }
-                  }
+                    tooltip: { 
+                        mode: 'index', 
+                        intersect: false,
+                        filter: (item) => item.datasetIndex !== 3
+                    }                  }
                 }}
               />
             </div>
@@ -381,7 +386,7 @@ function StatCard({ title, value, icon: Icon, color }) {
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
         <p className="text-2xl font-black text-slate-800">{value}</p>
       </div>
-      <div className={`p-3.5 rounded-2xl ${colors[color] || colors.slate}`}>
+      <div className={`p-3.5 rounded-2xl transition-transform group-hover:scale-105 ${colors[color] || colors.slate}`}>
         <Icon className="w-6 h-6" />
       </div>
     </div>
