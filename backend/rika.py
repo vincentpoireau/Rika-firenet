@@ -45,7 +45,7 @@ def get_external_weather(latitude, longitude):
         print(f"Erreur récupération météo : {e}")
         return None
 
-def load_location_config(config_file='location.yml'):
+def load_location_config(config_file='backend/location.yml'):
     """Charge la configuration de localisation depuis un fichier YAML"""
     try:
         with open(config_file, 'r') as f:
