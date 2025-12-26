@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
@@ -25,7 +25,7 @@ import {
   Filler
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import { Thermometer, Target, Flame, RefreshCw, Clock, ShieldCheck, AlertCircle, CloudSun, Calendar, Search } from 'lucide-react';
+import { Thermometer, Target, Flame, RefreshCw, ShieldCheck, AlertCircle, CloudSun, Calendar } from 'lucide-react';
 
 // Enregistrement des composants Chart.js
 ChartJS.register(
@@ -59,7 +59,6 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
   const [timeRange, setTimeRange] = useState('24h'); 
 
   // Authentification Anonyme
@@ -82,12 +81,14 @@ export default function App() {
           let dateObj = new Date();
           if (d.timestamp?.toDate) dateObj = d.timestamp.toDate();
           else if (d.timestamp?.seconds) dateObj = new Date(d.timestamp.seconds * 1000);
+          
           return { 
-            id: doc.id, ...d, date: dateObj,
+            id: doc.id,
+            date: dateObj,
             temperature: Number(d.temperature) || 0,
             thermostat: Number(d.thermostat) || 0,
-            consumption: Number(d.consumption) || 0,
-            // Récupération directe depuis la base de données
+            consumption_kg: Number(d.consumption_kg) || 0,
+            consumption_h: Number(d.consumption_h) || 0,
             temperature_ext: d.temperature_ext !== undefined ? Number(d.temperature_ext) : null,
             is_burning: Boolean(d.is_burning)
           };
@@ -101,7 +102,7 @@ export default function App() {
     return () => unsubscribeData();
   }, [user]);
 
-  // Données filtrées
+  // Filtrage temporel pour le graphique principal
   const filteredLogs = useMemo(() => {
     if (timeRange === 'all' || logs.length === 0) return logs;
     const now = new Date();
@@ -112,54 +113,57 @@ export default function App() {
     return logs.filter(log => log.date >= startTime);
   }, [logs, timeRange]);
 
-  // Calcul des limites d'échelle dynamique
+  // Limites d'échelle dynamique
   const tempLimits = useMemo(() => {
     if (filteredLogs.length === 0) return { min: 0, max: 30 };
-    
     const allValues = filteredLogs.flatMap(l => {
         const vals = [l.temperature, l.thermostat];
         if (l.temperature_ext !== null) vals.push(l.temperature_ext);
         return vals;
     });
-    
     return {
       min: Math.floor(Math.min(...allValues)) - 1,
       max: Math.ceil(Math.max(...allValues)) + 1
     };
   }, [filteredLogs]);
 
-  // Agrégation des statistiques
+  // Agrégation simplifiée des statistiques (Utilise uniquement les compteurs cumulés)
   const stats = useMemo(() => {
     const daily = {};
     const weekly = {};
     const monthly = {};
 
-    for (let i = 0; i < logs.length; i++) {
-      const log = logs[i];
+    const updatePeriod = (target, key, log) => {
+        const kgVal = log.consumption_kg;
+        const hVal = log.consumption_h;
+
+        if (!target[key]) {
+            target[key] = { 
+                kg_min: kgVal, kg_max: kgVal,
+                h_min: hVal, h_max: hVal 
+            };
+        }
+        target[key].kg_min = Math.min(target[key].kg_min, kgVal);
+        target[key].kg_max = Math.max(target[key].kg_max, kgVal);
+        target[key].h_min = Math.min(target[key].h_min, hVal);
+        target[key].h_max = Math.max(target[key].h_max, hVal);
+    };
+
+    for (const log of logs) {
       const d = log.date;
       const dayKey = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
       const weekKey = `S${Math.ceil(((d - new Date(d.getFullYear(), 0, 1)) / 86400000 + 1) / 7)} (${d.getFullYear()})`;
       const monthKey = d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
 
-      let runtimeHrs = 0;
-      if (i > 0 && logs[i-1].is_burning) {
-        const diffHrs = (log.date - logs[i-1].date) / (1000 * 60 * 60);
-        if (diffHrs < 1.5) runtimeHrs = diffHrs; 
-      }
-
-      const process = (target, key) => {
-        if (!target[key]) target[key] = { start: log.consumption, end: log.consumption, hrs: 0 };
-        target[key].end = log.consumption;
-        target[key].hrs += runtimeHrs;
-      };
-
-      process(daily, dayKey);
-      process(weekly, weekKey);
-      process(monthly, monthKey);
+      updatePeriod(daily, dayKey, log);
+      updatePeriod(weekly, weekKey, log);
+      updatePeriod(monthly, monthKey, log);
     }
 
     const format = (obj) => Object.entries(obj).map(([label, d]) => ({
-      label, consumption: Math.max(0, d.end - d.start), runtime: d.hrs
+      label, 
+      consumption_kg: Math.max(0, d.kg_max - d.kg_min), 
+      consumption_h: Math.max(0, d.h_max - d.h_min)
     }));
 
     return { 
@@ -175,7 +179,7 @@ export default function App() {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 text-white gap-4">
         <RefreshCw className="animate-spin w-8 h-8 text-orange-500" />
-        <p className="font-bold tracking-widest uppercase text-sm italic">Chargement des données...</p>
+        <p className="font-bold tracking-widest uppercase text-sm italic">Synchronisation Firenet...</p>
       </div>
     );
   }
@@ -260,7 +264,6 @@ export default function App() {
                     },
                     { 
                       label: 'Extérieur', 
-                      // Utilisation directe de la donnée Firestore
                       data: filteredLogs.map(l => l.temperature_ext), 
                       borderColor: '#94a3b8', 
                       borderWidth: 2,
@@ -284,7 +287,6 @@ export default function App() {
                       label: 'Chauffe active',
                       data: filteredLogs.map(l => l.is_burning ? tempLimits.max : -50), 
                       backgroundColor: 'rgba(251, 146, 60, 0.08)',
-                      // CORRECTION ICI : 'start' pour remplir jusqu'au bas du graphique
                       fill: 'start',
                       pointRadius: 0,
                       borderWidth: 0,
@@ -312,7 +314,8 @@ export default function App() {
                         mode: 'index', 
                         intersect: false,
                         filter: (item) => item.datasetIndex !== 3
-                    }                  }
+                    }
+                  }
                 }}
               />
             </div>
@@ -342,7 +345,7 @@ function StatsGraph({ title, data }) {
             datasets: [
               {
                 label: 'Pellets (kg)',
-                data: data.map(d => d.consumption),
+                data: data.map(d => d.consumption_kg),
                 backgroundColor: 'rgba(251, 146, 60, 0.7)',
                 borderRadius: 4,
                 yAxisID: 'y',
@@ -350,7 +353,7 @@ function StatsGraph({ title, data }) {
               {
                 type: 'line',
                 label: 'Fonctionnement (h)',
-                data: data.map(d => d.runtime),
+                data: data.map(d => d.consumption_h),
                 borderColor: '#3b82f6',
                 borderWidth: 2,
                 tension: 0.3,
@@ -365,6 +368,9 @@ function StatsGraph({ title, data }) {
               y: { position: 'left', grid: { display: false }, ticks: { font: { size: 9 } } },
               y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 9 } } },
               x: { grid: { display: false }, ticks: { font: { size: 9 } } }
+            },
+            plugins: {
+                legend: { labels: { font: { size: 10, weight: 'bold' }, usePointStyle: true } }
             }
           }} 
         />
