@@ -3,7 +3,6 @@ import time
 import requests
 import os
 import json
-import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 
 import firebase_admin
