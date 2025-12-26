@@ -8,10 +8,10 @@ from bs4 import BeautifulSoup
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+import yaml
 
 
 def connect(client, url_base, url_login, url_stove, user, pwd):
-    # ... (votre code existant)
     data = {'email': user, 'password': pwd}
     r = client.post(url_base + url_login, data)
     if 'Log out' in r.text:
@@ -35,17 +35,27 @@ def is_stove_burning(data):
     return data['sensors']['statusMainState'] in [4, 5]
 
 # --- FONCTION POUR RÉCUPÉRER LA TEMPÉRATURE EXTERNE VIA OPEN-METEO ---
-def get_external_weather():
-    """Récupère la température actuelle à Seynod via Open-Meteo"""
+def get_external_weather(latitude, longitude):
+    """Récupère la température actuelle via Open-Meteo"""
     try:
-        # Latitude/Longitude pour Seynod (45.88, 6.10)
-        url = "https://api.open-meteo.com/v1/forecast?latitude=45.88&longitude=6.10&current_weather=true"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true"
         response = requests.get(url, timeout=10)
         data = response.json()
         return data['current_weather']['temperature']
     except Exception as e:
         print(f"Erreur récupération météo : {e}")
         return None
+
+def load_location_config(config_file='location.yml'):
+    """Charge la configuration de localisation depuis un fichier YAML"""
+    try:
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+        return config['city'], config['latitude'], config['longitude']
+    except Exception as e:
+        print(f"Erreur lecture config : {e}")
+        return None, None, None
+
 
 # --- MAIN ADAPTÉ POUR GITHUB ACTIONS ---
 
@@ -84,9 +94,10 @@ if __name__ == "__main__":
         consumption_kg = get_stove_consumption_kg(stove_infos)
         consumption_h = get_stove_consumption_h(stove_infos)
         # Récupération de la météo extérieure (Seynod)
-        ext_temp = get_external_weather()
+        city, latitude, longitude = load_location_config()  
+        ext_temp = get_external_weather(latitude, longitude)
         if ext_temp is not None:
-            print(f"Température extérieure actuelle à Seynod : {ext_temp}°C")
+            print(f"Température extérieure actuelle à {city} : {ext_temp}°C")
         else:
             print("Impossible de récupérer la température extérieure.")
 
