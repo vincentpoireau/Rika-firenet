@@ -11,6 +11,8 @@ First step is to create a 'Firestore database' on Google Firebase.
 There is a python script that needs to be run every few minutes.
 The script is run from Github Action thanks to .github/workflows/main.yml. The period of running is not exact in Github.
 
+The settings (location, latitude, and longitude) are set in the external file location.yml. This is needed for the external temperature.
+
 It is necessary to create Secret variable in Github in order not to expose sensitive information. Here is how to do that:
 ```
 Voici les étapes précises pour configurer vos variables secrètes sur GitHub afin que votre fichier main.yml puisse les utiliser en toute sécurité :
@@ -43,7 +45,9 @@ Secret : Copiez et collez l'intégralité du contenu du fichier .json que vous a
 The frontend has been developped with Gemini 3 AI. Many iterations have been needed to get exactly the desired result.
 All the interesting code is located in src/App.jsx.
 
-The file src/App.jsx needs to know how to access the Firestore database: the information is given in the variable firebaseConfig.
+The settings should be put in the file config.js :
+- how to access the Firestore database (the variable firebaseConfig).
+- The location (where is the stove) and title.
 
 The web site is hosted on Google Firebase. 
 
