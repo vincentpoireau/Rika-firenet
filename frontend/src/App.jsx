@@ -40,15 +40,9 @@ ChartJS.register(
   Filler
 );
 
-// Configuration Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyD9qxoLbHD8d-ZiJnFgTVPZIbo1hgZ40Sw",
-  authDomain: "rika-domo.firebaseapp.com",
-  projectId: "rika-domo",
-  storageBucket: "rika-domo.firebasestorage.app",
-  messagingSenderId: "142029259326",
-  appId: "1:142029259326:web:5199fd9385018644ad876f"
-};
+
+// Import des configurations depuis le fichier externe
+import { firebaseConfig, appSettings } from './config';
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -71,7 +65,8 @@ export default function App() {
   // Récupération des données Firestore
   useEffect(() => {
     if (!user) return;
-    const stoveRef = collection(db, 'stove');
+    // Utilisation du nom de collection défini dans la config
+    const stoveRef = collection(db, appSettings.stoveCollection || 'stove');
     const q = query(stoveRef, orderBy('timestamp', 'asc'));
 
     const unsubscribeData = onSnapshot(q, (snapshot) => {
@@ -179,7 +174,7 @@ export default function App() {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 text-white gap-4">
         <RefreshCw className="animate-spin w-8 h-8 text-orange-500" />
-        <p className="font-bold tracking-widest uppercase text-sm italic">Synchronisation Firenet...</p>
+        <p className="font-bold tracking-widest uppercase text-sm italic">Connexion {appSettings.title}...</p>
       </div>
     );
   }
@@ -197,9 +192,11 @@ export default function App() {
 
         <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">Rika Firenet</h1>
+            {/* Utilisation du titre depuis la config */}
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">{appSettings.title}</h1>
             <p className="text-slate-500 flex items-center gap-2 text-sm font-semibold uppercase tracking-tighter">
-               <ShieldCheck className="w-4 h-4 text-emerald-500" /> Seynod, France
+               {/* Utilisation de la localisation depuis la config */}
+               <ShieldCheck className="w-4 h-4 text-emerald-500" /> {appSettings.location}
             </p>
           </div>
           <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-2xl border border-slate-200 shadow-sm">
