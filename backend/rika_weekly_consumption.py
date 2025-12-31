@@ -60,7 +60,7 @@ def aggregate_last_week():
     
     # Moyennes de températures
     temps_int = [d['temperature'] for d in data_points if 'temperature' in d]
-    temps_ext = [d['ext_temp'] for d in data_points if d.get('ext_temp') is not None]
+    temps_ext = [d['temperature_ext'] for d in data_points if d.get('temperature_ext') is not None]
 
     avg_temp_int = sum(temps_int) / len(temps_int) if temps_int else 0
     avg_temp_ext = sum(temps_ext) / len(temps_ext) if temps_ext else None
@@ -87,6 +87,8 @@ def aggregate_last_week():
     
     print(f"Succès ! Données sauvegardées dans stove_weeks/{doc_id}")
     print(f"Conso Semaine: {weekly_kg} kg, {weekly_h} h")
+    print(f"Temp Moy Int: {avg_temp_int:.1f}°C, Ext: {avg_temp_ext:.1f}°C")
+
 
 if __name__ == "__main__":
     aggregate_last_week()

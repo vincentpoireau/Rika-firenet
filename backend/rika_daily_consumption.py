@@ -90,6 +90,8 @@ def aggregate_yesterday():
     
     print(f"Succès ! Données sauvegardées dans stove_days/{doc_id}")
     print(f"Conso: {daily_kg} kg, {daily_h} h")
+    print(f"Temp Moy Int: {avg_temp_int:.1f}°C, Ext: {avg_temp_ext:.1f}°C")
+
 
 if __name__ == "__main__":
     aggregate_yesterday()

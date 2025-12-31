@@ -8,14 +8,16 @@ on:
     - cron: '0 2 * * *'
     # 3. Agrégation hebdomadaire : Tous les lundis à 03h00 UTC
     - cron: '0 3 * * 1'
+    # 4. Agrégation mensuelle : Le 1er du mois à 04h00 UTC
+    - cron: '0 4 1 * *'
   workflow_dispatch:
 
 jobs:
   # Job 1 : Récupération des données (toutes les 15 min)
   fetch-data:
     runs-on: ubuntu-latest
-    # Exécuté sur cron 15min ou manuel
-    if: github.event.schedule != '0 2 * * *' && github.event.schedule != '0 3 * * 1' || github.event_name == 'workflow_dispatch'
+    # Exécuté sur cron 15min ou manuel (exclut les crons d'agrégation pure)
+    if: github.event.schedule != '0 2 * * *' && github.event.schedule != '0 3 * * 1' && github.event.schedule != '0 4 1 * *' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,7 +34,6 @@ jobs:
   # Job 2 : Agrégation Journalière (02h00 UTC)
   aggregate-day:
     runs-on: ubuntu-latest
-    # Exécuté à 02h00 ou manuel
     if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +49,6 @@ jobs:
   # Job 3 : Agrégation Hebdomadaire (Lundi 03h00 UTC)
   aggregate-week:
     runs-on: ubuntu-latest
-    # Exécuté le Lundi à 03h00 ou manuel
     if: github.event.schedule == '0 3 * * 1' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -60,3 +60,18 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python backend/rika_weekly_consumption.py
+
+  # Job 4 : Agrégation Mensuelle (1er du mois 04h00 UTC)
+  aggregate-month:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 4 1 * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install firebase-admin
+      - name: Run Monthly Aggregation
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python backend/rika_monthly_consumption.py
