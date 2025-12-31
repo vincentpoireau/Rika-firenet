@@ -6,14 +6,16 @@ on:
     - cron: '*/15 * * * *'
     # 2. Agrégation journalière : Tous les jours à 02h00 UTC
     - cron: '0 2 * * *'
+    # 3. Agrégation hebdomadaire : Tous les lundis à 03h00 UTC
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 jobs:
   # Job 1 : Récupération des données (toutes les 15 min)
   fetch-data:
     runs-on: ubuntu-latest
-    # On ne lance ce job que si c'est le cron des 15min OU un lancement manuel
-    if: github.event.schedule != '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    # Exécuté sur cron 15min ou manuel
+    if: github.event.schedule != '0 2 * * *' && github.event.schedule != '0 3 * * 1' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,10 +29,10 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python backend/rika.py
 
-  # Job 2 : Agrégation (une fois par jour)
-  aggregate-data:
+  # Job 2 : Agrégation Journalière (02h00 UTC)
+  aggregate-day:
     runs-on: ubuntu-latest
-    # On lance ce job uniquement à 02h00 OU manuellement
+    # Exécuté à 02h00 ou manuel
     if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
@@ -43,4 +45,18 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python backend/rika_daily_consumption.py
 
-
+  # Job 3 : Agrégation Hebdomadaire (Lundi 03h00 UTC)
+  aggregate-week:
+    runs-on: ubuntu-latest
+    # Exécuté le Lundi à 03h00 ou manuel
+    if: github.event.schedule == '0 3 * * 1' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install firebase-admin
+      - name: Run Weekly Aggregation
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python backend/rika_weekly_consumption.py
