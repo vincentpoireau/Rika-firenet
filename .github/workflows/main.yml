@@ -1,29 +1,46 @@
-name: Mise à jour Rika Domo
+name: Rika Domo Automation
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # S'exécute toutes les 5 minutes
-  workflow_dispatch: # Permet de lancer le script manuellement
+    # 1. Mise à jour des données temps réel : Toutes les 15 minutes
+    - cron: '*/15 * * * *'
+    # 2. Agrégation journalière : Tous les jours à 02h00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  # Job 1 : Récupération des données (toutes les 15 min)
+  fetch-data:
     runs-on: ubuntu-latest
+    # On ne lance ce job que si c'est le cron des 15min OU un lancement manuel
+    if: github.event.schedule != '0 2 * * *' || github.event_name == 'workflow_dispatch'
     steps:
-      - name: Récupérer le code
-        uses: actions/checkout@v4 # Passage en v4
-        
-      - name: Installer Python
-        uses: actions/setup-python@v5 # Passage en v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Version moderne et stable
-          
-      - name: Installer les dépendances
-        run: pip install -r backend/requirements.txt
-        
-      - name: Exécuter le script
+          python-version: '3.11'
+      - run: pip install -r backend/requirements.txt
+      - name: Run Rika Fetch
         env:
           RIKA_EMAIL: ${{ secrets.RIKA_EMAIL }}
           RIKA_PASSWORD: ${{ secrets.RIKA_PASSWORD }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python backend/rika.py
-        
+
+  # Job 2 : Agrégation (une fois par jour)
+  aggregate-data:
+    runs-on: ubuntu-latest
+    # On lance ce job uniquement à 02h00 OU manuellement
+    if: github.event.schedule == '0 2 * * *' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install firebase-admin
+      - name: Run Daily Aggregation
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python backend/aggregate_daily.py
+
+
