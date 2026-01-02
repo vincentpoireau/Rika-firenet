@@ -5,7 +5,8 @@ import {
   collection, 
   query, 
   onSnapshot, 
-  orderBy 
+  orderBy, 
+  limit
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -40,7 +41,6 @@ ChartJS.register(
   Filler
 );
 
-
 // Import des configurations depuis le fichier externe
 import { firebaseConfig, appSettings } from './config';
 
@@ -50,54 +50,91 @@ const auth = getAuth(app);
 
 export default function App() {
   const [logs, setLogs] = useState([]);
+  const [dailyStats, setDailyStats] = useState([]);
+  const [weeklyStats, setWeeklyStats] = useState([]);
+  const [monthlyStats, setMonthlyStats] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('24h'); 
 
-  // Authentification Anonyme
+  // Authentification
   useEffect(() => {
     signInAnonymously(auth).catch(err => setError(`Erreur Auth : ${err.message}`));
     const unsubscribeAuth = onAuthStateChanged(auth, (u) => u && setUser(u));
     return () => unsubscribeAuth();
   }, []);
 
-  // Récupération des données Firestore
+  // 1. Récupération des logs TEMPS RÉEL (Graphique 1)
   useEffect(() => {
     if (!user) return;
-    // Utilisation du nom de collection défini dans la config
-    const stoveRef = collection(db, appSettings.stoveCollection || 'stove');
-    const q = query(stoveRef, orderBy('timestamp', 'asc'));
+    
+    const stoveCollectionName = appSettings.stoveCollection || 'stove';
+    const q = query(collection(db, stoveCollectionName), orderBy('timestamp', 'desc'), limit(1500));
 
-    const unsubscribeData = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const data = snapshot.docs.map(doc => {
-          const d = doc.data();
-          let dateObj = new Date();
-          if (d.timestamp?.toDate) dateObj = d.timestamp.toDate();
-          else if (d.timestamp?.seconds) dateObj = new Date(d.timestamp.seconds * 1000);
-          
-          return { 
-            id: doc.id,
-            date: dateObj,
-            temperature: Number(d.temperature) || 0,
-            thermostat: Number(d.thermostat) || 0,
-            consumption_kg: Number(d.consumption_kg) || 0,
-            consumption_h: Number(d.consumption_h) || 0,
-            temperature_ext: d.temperature_ext !== undefined ? Number(d.temperature_ext) : null,
-            is_burning: Boolean(d.is_burning)
-          };
-        });
-        setLogs(data);
-        setError(null);
-      }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        let dateObj = new Date();
+        if (d.timestamp?.toDate) dateObj = d.timestamp.toDate();
+        else if (d.timestamp?.seconds) dateObj = new Date(d.timestamp.seconds * 1000);
+        
+        return { 
+          id: doc.id,
+          date: dateObj,
+          temperature: Number(d.temperature) || 0,
+          thermostat: Number(d.thermostat) || 0,
+          temperature_ext: Number(d.temperature_ext) || 0,
+          is_burning: Boolean(d.is_burning)
+        };
+      }).reverse();
+      
+      setLogs(data);
       setLoading(false);
-    }, (err) => setError(`Erreur Firestore : ${err.message}`));
+    }, (err) => console.error("Erreur logs temps réel:", err));
 
-    return () => unsubscribeData();
+    return () => unsubscribe();
   }, [user]);
 
-  // Filtrage temporel pour le graphique principal
+  // 2. Récupération des données AGRÉGÉES (Graphiques 2, 3, 4)
+  useEffect(() => {
+    if (!user) return;
+
+    // Fonction générique pour s'abonner aux collections agrégées
+    const subscribeToStats = (collName, setter, limitCount) => {
+      // Pas de tri 'orderBy' pour éviter les erreurs d'index manquant, tri manuel ensuite
+      const q = query(collection(db, collName), limit(limitCount));
+      
+      return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => {
+            const d = doc.data();
+            return {
+                id: doc.id,
+                label: doc.id, // L'ID sert de label (ex: 2023-10-27)
+                consumption_kg: Number(d.consumption_kg) || 0,
+                consumption_h: Number(d.consumption_h) || 0,
+                avg_temp_int: Number(d.avg_temp_int) || 0,
+                avg_temp_ext: Number(d.avg_temp_ext) || 0
+            };
+        });
+        // Tri manuel par ID pour l'ordre chronologique
+        setter(data.sort((a, b) => a.id.localeCompare(b.id)));
+      }, (err) => console.warn(`Erreur lecture ${collName}:`, err));
+    };
+
+    // Abonnement aux 3 collections
+    const unsubDay = subscribeToStats(appSettings.stove_days, setDailyStats, 60);    // 60 derniers jours
+    const unsubWeek = subscribeToStats(appSettings.stove_weeks, setWeeklyStats, 52);  // 52 dernières semaines
+    const unsubMonth = subscribeToStats(appSettings.stove_months, setMonthlyStats, 24); // 24 derniers mois
+
+    return () => {
+        unsubDay();
+        unsubWeek();
+        unsubMonth();
+    };
+  }, [user]);
+
+  // Filtrage et Limites pour le Graphique 1
   const filteredLogs = useMemo(() => {
     if (timeRange === 'all' || logs.length === 0) return logs;
     const now = new Date();
@@ -108,69 +145,18 @@ export default function App() {
     return logs.filter(log => log.date >= startTime);
   }, [logs, timeRange]);
 
-  // Limites d'échelle dynamique
   const tempLimits = useMemo(() => {
     if (filteredLogs.length === 0) return { min: 0, max: 30 };
-    const allValues = filteredLogs.flatMap(l => {
-        const vals = [l.temperature, l.thermostat];
-        if (l.temperature_ext !== null) vals.push(l.temperature_ext);
-        return vals;
-    });
+    const allValues = filteredLogs.flatMap(l => [l.temperature, l.thermostat, l.temperature_ext].filter(v => v !== null));
     return {
-      min: Math.floor(Math.min(...allValues)) - 1,
-      max: Math.ceil(Math.max(...allValues)) + 1
+      min: Math.floor(Math.min(...allValues)) - 2,
+      max: Math.ceil(Math.max(...allValues)) + 2
     };
   }, [filteredLogs]);
 
-  // Agrégation simplifiée des statistiques (Utilise uniquement les compteurs cumulés)
-  const stats = useMemo(() => {
-    const daily = {};
-    const weekly = {};
-    const monthly = {};
+  const latest = logs.length > 0 ? logs[logs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), temperature_ext: null };
 
-    const updatePeriod = (target, key, log) => {
-        const kgVal = log.consumption_kg;
-        const hVal = log.consumption_h;
-
-        if (!target[key]) {
-            target[key] = { 
-                kg_min: kgVal, kg_max: kgVal,
-                h_min: hVal, h_max: hVal 
-            };
-        }
-        target[key].kg_min = Math.min(target[key].kg_min, kgVal);
-        target[key].kg_max = Math.max(target[key].kg_max, kgVal);
-        target[key].h_min = Math.min(target[key].h_min, hVal);
-        target[key].h_max = Math.max(target[key].h_max, hVal);
-    };
-
-    for (const log of logs) {
-      const d = log.date;
-      const dayKey = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      const weekKey = `S${Math.ceil(((d - new Date(d.getFullYear(), 0, 1)) / 86400000 + 1) / 7)} (${d.getFullYear()})`;
-      const monthKey = d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-
-      updatePeriod(daily, dayKey, log);
-      updatePeriod(weekly, weekKey, log);
-      updatePeriod(monthly, monthKey, log);
-    }
-
-    const format = (obj) => Object.entries(obj).map(([label, d]) => ({
-      label, 
-      consumption_kg: Math.max(0, d.kg_max - d.kg_min), 
-      consumption_h: Math.max(0, d.h_max - d.h_min)
-    }));
-
-    return { 
-      daily: format(daily).slice(-14),
-      weekly: format(weekly).slice(-8),
-      monthly: format(monthly).slice(-12)
-    };
-  }, [logs]);
-
-  const latest = filteredLogs.length > 0 ? filteredLogs[filteredLogs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), temperature_ext: null };
-
-  if (loading && !error) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 text-white gap-4">
         <RefreshCw className="animate-spin w-8 h-8 text-orange-500" />
@@ -192,136 +178,68 @@ export default function App() {
 
         <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            {/* Utilisation du titre depuis la config */}
             <h1 className="text-3xl font-black text-slate-800 tracking-tight italic uppercase">{appSettings.title}</h1>
             <p className="text-slate-500 flex items-center gap-2 text-sm font-semibold uppercase tracking-tighter">
-               {/* Utilisation de la localisation depuis la config */}
                <ShieldCheck className="w-4 h-4 text-emerald-500" /> {appSettings.location}
             </p>
           </div>
-          <div className="flex items-center gap-3 bg-white px-5 py-2.5 rounded-2xl border border-slate-200 shadow-sm">
-             <div className={`w-3 h-3 rounded-full ${latest.is_burning ? 'bg-orange-500 animate-pulse' : 'bg-slate-300'}`}></div>
-             <span className="text-sm font-bold text-slate-700 uppercase tracking-widest italic">
-               {latest.is_burning ? 'Poêle actif' : 'En pause'}
-             </span>
-          </div>
         </header>
 
+        {/* Indicateurs Clés */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard title="Intérieur" value={`${latest.temperature.toFixed(1)}°C`} icon={Thermometer} color="rose" />
           <StatCard title="Extérieur" value={latest.temperature_ext !== null ? `${latest.temperature_ext.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
           <StatCard title="Consigne" value={`${latest.thermostat.toFixed(1)}°C`} icon={Target} color="slate" />
-          <StatCard title="Flamme" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
+          <StatCard title="En fonctionnement" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
         </div>
 
         <div className="grid grid-cols-1 gap-8">
+          
+          {/* GRAPHIQUE 1 : Temps réel */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <h3 className="text-sm font-black flex items-center gap-2 text-slate-700 uppercase italic tracking-tight">
-                <Thermometer className="w-4 h-4 text-rose-500" /> Températures
+                <Thermometer className="w-4 h-4 text-rose-500" /> Températures temps réel
               </h3>
-              
               <div className="flex items-center bg-slate-100 p-1 rounded-xl">
                 {[
                   { label: '24h', value: '24h' },
                   { label: '7j', value: '7d' },
                   { label: '30j', value: '30d' },
-                  { label: 'Tout', value: 'all' }
+                  { label: 'Tout', value: 'all' }                
                 ].map((opt) => (
-                  <button 
-                    key={opt.value}
-                    onClick={() => setTimeRange(opt.value)}
-                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${timeRange === opt.value ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
+                  <button key={opt} onClick={() => setTimeRange(opt.value)} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${timeRange === opt.value ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                     {opt.label}
                   </button>
                 ))}
               </div>
             </div>
-
-            <div className="h-[450px]">
+            <div className="h-[400px]">
               <Line 
                 data={{
-                  labels: filteredLogs.map(l => l.date.toLocaleString('fr-FR', { 
-                    day: timeRange === '24h' ? undefined : '2-digit', 
-                    month: timeRange === '24h' ? undefined : '2-digit', 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })),
+                  labels: filteredLogs.map(l => l.date.toLocaleString('fr-FR', { day: timeRange === '24h' ? undefined : '2-digit', month: timeRange === '24h' ? undefined : '2-digit', hour: '2-digit', minute: '2-digit' })),
                   datasets: [
-                    { 
-                      label: 'Intérieur', 
-                      data: filteredLogs.map(l => l.temperature), 
-                      borderColor: '#f43f5e', 
-                      borderWidth: 3,
-                      backgroundColor: 'transparent',
-                      tension: 0.4, 
-                      pointRadius: 0,
-                      yAxisID: 'y'
-                    },
-                    { 
-                      label: 'Extérieur', 
-                      data: filteredLogs.map(l => l.temperature_ext), 
-                      borderColor: '#94a3b8', 
-                      borderWidth: 2,
-                      backgroundColor: 'rgba(148, 163, 184, 0.1)',
-                      fill: true,
-                      tension: 0.4, 
-                      pointRadius: 0,
-                      yAxisID: 'y'
-                    },
-                    { 
-                      label: 'Consigne', 
-                      data: filteredLogs.map(l => l.thermostat), 
-                      borderColor: '#3b82f6', 
-                      borderDash: [5, 5], 
-                      borderWidth: 1.5,
-                      tension: 0, 
-                      pointRadius: 0,
-                      yAxisID: 'y'
-                    },
-                    {
-                      label: 'Chauffe active',
-                      data: filteredLogs.map(l => l.is_burning ? tempLimits.max : -50), 
-                      backgroundColor: 'rgba(251, 146, 60, 0.08)',
-                      fill: 'start',
-                      pointRadius: 0,
-                      borderWidth: 0,
-                      tension: 0,
-                      stepped: true,
-                      yAxisID: 'y'
-                    }
+                    { label: 'Intérieur', data: filteredLogs.map(l => l.temperature), borderColor: '#f43f5e', borderWidth: 3, tension: 0.4, pointRadius: 0 },
+                    { label: 'Extérieur', data: filteredLogs.map(l => l.temperature_ext), borderColor: '#94a3b8', borderWidth: 2, backgroundColor: 'rgba(148, 163, 184, 0.1)', fill: true, tension: 0.4, pointRadius: 0 },
+                    { label: 'Consigne', data: filteredLogs.map(l => l.thermostat), borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, tension: 0, pointRadius: 0 },
+                    { label: 'Chauffe', data: filteredLogs.map(l => l.is_burning ? tempLimits.max : -50), borderColor: 'rgba(104, 52, 10, 0.08)', borderWidth: 2, backgroundColor: 'rgba(251, 146, 60, 0.08)', fill: 'start', pointRadius: 0, stepped: true, tension: 0 }
                   ]
                 }}
                 options={{ 
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  scales: { 
-                    x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 12 } },
-                    y: { 
-                      min: tempLimits.min, 
-                      max: tempLimits.max,
-                      grid: { color: '#f1f5f9' },
-                      title: { display: true, text: 'Température (°C)', font: { weight: 'bold', size: 10 } }
-                    }
-                  },
-                  plugins: {
-                    legend: { position: 'top', align: 'end', labels: { usePointStyle: true, font: { size: 10, weight: 'bold' } } },
-                    tooltip: { 
-                        mode: 'index', 
-                        intersect: false,
-                        filter: (item) => item.datasetIndex !== 3
-                    }
-                  }
+                  responsive: true, maintainAspectRatio: false,
+                  interaction: { intersect: false, mode: 'index' },
+                  scales: { y: { min: tempLimits.min, max: tempLimits.max, grid: { color: '#f1f5f9' } } },
+                  plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, font: { size: 10, weight: 'bold' } } }, tooltip: { mode: 'index', intersect: false, filter: (i) => i.datasetIndex !== 3 } }
                 }}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <StatsGraph title="Consommation Journalière" data={stats.daily} />
-            <StatsGraph title="Bilan Hebdomadaire" data={stats.weekly} />
-            <StatsGraph title="Bilan Mensuel" data={stats.monthly} />
+          {/* GRAPHIQUES DE BILAN (1 par ligne, 4 données, 3 échelles) */}
+          <div className="grid grid-cols-1 gap-6">
+            <StatsGraph title="Bilan Quotidien" data={dailyStats} />
+            <StatsGraph title="Bilan Hebdomadaire" data={weeklyStats} />
+            <StatsGraph title="Bilan Mensuel" data={monthlyStats} />
           </div>
         </div>
       </div>
@@ -329,62 +247,126 @@ export default function App() {
   );
 }
 
+// Composant Graphique de Bilan (4 Datasets, 3 Axes)
 function StatsGraph({ title, data }) {
+  const chartData = useMemo(() => ({
+    labels: data.map(d => d.label),
+    datasets: [
+      {
+        type: 'bar',
+        label: ' Pellets (kg)',
+        data: data.map(d => d.consumption_kg),
+        backgroundColor: 'rgba(251, 146, 60, 0.8)',
+        borderRadius: 4,
+        order: 4,
+        yAxisID: 'y', // Axe Gauche : kg
+      },
+      {
+        type: 'line',
+        label: ' Fonctionnement (h)',
+        data: data.map(d => d.consumption_h),
+        borderColor: '#3b82f6',
+        backgroundColor: '#3b82f6',
+        borderWidth: 2,
+        tension: 0.3,
+        pointRadius: 3,
+        order: 1,
+        yAxisID: 'y1', // Axe Droite 1 : Heures
+      },
+      {
+        type: 'line',
+        label: ' t° int. moy.',
+        data: data.map(d => d.avg_temp_int),
+        borderColor: '#f43f5e',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 3,
+        order: 2,
+        yAxisID: 'y2', // Axe Droite 2 : Degrés
+      },
+      {
+        type: 'line',
+        label: ' t° ext. moy.',
+        data: data.map(d => d.avg_temp_ext),
+        borderColor: '#94a3b8',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 3,
+        order: 3,
+        yAxisID: 'y2', // Axe Droite 2 : Degrés
+      }
+    ]
+  }), [data]);
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { 
+      legend: { position: 'top', labels: { font: { size: 9, weight: 'bold' }, usePointStyle: true, boxWidth: 6 } },
+      tooltip: { 
+        callbacks: {
+          label: (ctx) => {
+            const val = ctx.raw;
+            if (val === null || val === undefined) return null;
+            if (ctx.dataset.label.includes('Pellets')) return `${ctx.dataset.label}: ${val.toFixed(1)} kg`;
+            if (ctx.dataset.label.includes('Marche')) return `${ctx.dataset.label}: ${val.toFixed(1)} h`;
+            return `${ctx.dataset.label}: ${val.toFixed(1)} °C`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+      // Axe Gauche : KG
+      y: { 
+        type: 'linear', 
+        position: 'left', 
+        title: { display: true, text: 'kg', color: '#fb923c', font: {size: 9} },
+        grid: { display: false } 
+      },
+      // Axe Droite 1 : Heures
+      y1: { 
+        type: 'linear', 
+        position: 'right', 
+        title: { display: true, text: 'h', color: '#3b82f6', font: {size: 9} },
+        grid: { display: false }
+      },
+      // Axe Droite 2 : Degrés (sans grille, pour info)
+      y2: {
+        type: 'linear',
+        position: 'right',
+        display: true, // On l'affiche pour voir l'échelle
+        title: { display: true, text: '°C', color: '#f43f5e', font: {size: 9} },
+        grid: { display: false },
+        min: -10, // Plage fixe pour éviter que les températures écrasent le reste visuellement
+        max: 35
+      }
+    }
+  };
+
   return (
-    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-      <h3 className="text-[11px] font-black mb-6 flex items-center gap-2 text-slate-600 uppercase italic tracking-tight">
+    <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm h-[350px] flex flex-col">
+      <h3 className="text-[11px] font-black mb-4 flex items-center gap-2 text-slate-600 uppercase italic tracking-tight">
         <Calendar className="w-3.5 h-3.5 text-orange-500" /> {title}
       </h3>
-      <div className="h-[250px]">
-        <Bar 
-          data={{
-            labels: data.map(d => d.label),
-            datasets: [
-              {
-                label: 'Pellets (kg)',
-                data: data.map(d => d.consumption_kg),
-                backgroundColor: 'rgba(251, 146, 60, 0.7)',
-                borderRadius: 4,
-                yAxisID: 'y',
-              },
-              {
-                type: 'line',
-                label: 'Fonctionnement (h)',
-                data: data.map(d => d.consumption_h),
-                borderColor: '#3b82f6',
-                borderWidth: 2,
-                tension: 0.3,
-                yAxisID: 'y1',
-              }
-            ]
-          }} 
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              y: { position: 'left', grid: { display: false }, ticks: { font: { size: 9 } } },
-              y1: { position: 'right', grid: { display: false }, ticks: { font: { size: 9 } } },
-              x: { grid: { display: false }, ticks: { font: { size: 9 } } }
-            },
-            plugins: {
-                legend: { labels: { font: { size: 10, weight: 'bold' }, usePointStyle: true } }
-            }
-          }} 
-        />
+      <div className="flex-1 min-h-0">
+        {data.length > 0 ? (
+          <Bar data={chartData} options={options} />
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center text-xs text-slate-400 italic border-2 border-dashed border-slate-100 rounded-xl">
+            En attente de données agrégées...
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function StatCard({ title, value, icon: Icon, color }) {
-  const colors = {
-    rose: "bg-rose-50 text-rose-500",
-    blue: "bg-blue-50 text-blue-500",
-    orange: "bg-orange-50 text-orange-500",
-    slate: "bg-slate-50 text-slate-500"
-  };
+  const colors = { rose: "bg-rose-50 text-rose-500", blue: "bg-blue-50 text-blue-500", orange: "bg-orange-50 text-orange-500", slate: "bg-slate-50 text-slate-500" };
   return (
-    <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center justify-between shadow-sm group">
+    <div className="bg-white p-6 rounded-3xl border border-slate-200 flex items-center justify-between shadow-sm group hover:border-slate-300 transition-colors">
       <div>
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
         <p className="text-2xl font-black text-slate-800">{value}</p>

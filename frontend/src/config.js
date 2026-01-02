@@ -19,5 +19,8 @@ export const firebaseConfig = {
 export const appSettings = {
   location: "Seynod, France", // Le texte affiché en haut à droite (Ville, Pays)
   title: "Rika Firenet",      // Le titre principal de l'application
-  stoveCollection: "stove"    // Le nom de la collection dans la base de données (par défaut 'stove')
+  stoveCollection: "stove",    // Le nom de la collection dans la base de données (par défaut 'stove')
+  stove_days: "stove_days",    // Le nom de la collection quotidienne dans la base de données (par défaut 'stove_days')
+  stove_weeks: "stove_weeks",    // Le nom de la collection hebdomadaire dans la base de données (par défaut 'stove_weeks')
+  stove_months: "stove_months"    // Le nom de la collection mensuelle dans la base de données (par défaut 'stove_months')
 };
