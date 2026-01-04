@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^4.1.0",
     "firebase": "^12.7.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",

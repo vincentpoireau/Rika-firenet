@@ -17,6 +17,7 @@ import {
   Chart as ChartJS, 
   CategoryScale, 
   LinearScale, 
+  TimeScale,
   PointElement, 
   LineElement, 
   BarElement,
@@ -27,11 +28,13 @@ import {
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
 import { Thermometer, Target, Flame, RefreshCw, ShieldCheck, AlertCircle, CloudSun, Calendar } from 'lucide-react';
+import 'chartjs-adapter-date-fns';
 
 // Enregistrement des composants Chart.js
 ChartJS.register(
   CategoryScale, 
   LinearScale, 
+  TimeScale,
   PointElement, 
   LineElement, 
   BarElement, 
@@ -109,12 +112,12 @@ export default function App() {
         const data = snapshot.docs.map(doc => {
             const d = doc.data();
             return {
-                id: doc.id,
-                label: doc.id, // L'ID sert de label (ex: 2023-10-27)
-                consumption_kg: Number(d.consumption_kg) || 0,
-                consumption_h: Number(d.consumption_h) || 0,
-                avg_temp_int: Number(d.avg_temp_int) || 0,
-                avg_temp_ext: Number(d.avg_temp_ext) || 0
+              id: doc.id,
+              label: doc.id.split('-').reverse().join('/'), // Format JJ/MM/AAAA
+              consumption_kg: Number(d.consumption_kg) || 0,
+              consumption_h: Number(d.consumption_h) || 0,
+              avg_temp_int: Number(d.avg_temp_int) || 0,
+              avg_temp_ext: Number(d.avg_temp_ext) || 0
             };
         });
         // Tri manuel par ID pour l'ordre chronologique
@@ -217,7 +220,7 @@ export default function App() {
             <div className="h-[400px]">
               <Line 
                 data={{
-                  labels: filteredLogs.map(l => l.date.toLocaleString('fr-FR', { day: timeRange === '24h' ? undefined : '2-digit', month: timeRange === '24h' ? undefined : '2-digit', hour: '2-digit', minute: '2-digit' })),
+                  labels: filteredLogs.map(l => l.date),
                   datasets: [
                     { label: 'Intérieur', data: filteredLogs.map(l => l.temperature), borderColor: '#f43f5e', borderWidth: 3, tension: 0.4, pointRadius: 0 },
                     { label: 'Extérieur', data: filteredLogs.map(l => l.temperature_ext), borderColor: '#94a3b8', borderWidth: 2, backgroundColor: 'rgba(148, 163, 184, 0.1)', fill: true, tension: 0.4, pointRadius: 0 },
@@ -228,8 +231,35 @@ export default function App() {
                 options={{ 
                   responsive: true, maintainAspectRatio: false,
                   interaction: { intersect: false, mode: 'index' },
-                  scales: { y: { min: tempLimits.min, max: tempLimits.max, grid: { color: '#f1f5f9' } } },
-                  plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, font: { size: 10, weight: 'bold' } } }, tooltip: { mode: 'index', intersect: false, filter: (i) => i.datasetIndex !== 3 } }
+                  scales: {
+                    x: {
+                      type: 'time',
+                      time: {
+                        unit: timeRange === '24h' ? 'hour' : 'day', // Unité de base : heure ou jour
+                        stepSize: 1,  // Afficher une graduation toutes les 1 heure/jour
+                        displayFormats: {
+                          hour: 'HH:00', // Format d'affichage : "13:00"
+                          day: 'dd/MM/yyyy' // Format d'affichage : "13/02/2025"
+                        }
+                      },
+                      grid: { color: '#a0989cb2', lineWidth: 1.2 },
+                      title: {
+                        display: true,
+                        text: timeRange === '24h' ? 'Heure' : 'Jour'
+                      },
+                    }, 
+                    y: { min: tempLimits.min, max: tempLimits.max, grid: { color: '#f1f5f9' },  title: { display: true, text: 'Température (°C)' } } },
+                  plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, font: { size: 10, weight: 'bold' } } }, 
+                    tooltip: {
+                      mode: 'index', intersect: false, filter: (i) => i.datasetIndex !== 3,
+                      callbacks: {
+                        title: (items) => {
+                            const date = new Date(items[0].parsed.x);
+                            return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                        }
+                      }
+                    }
+                  }
                 }}
               />
             </div>
@@ -254,7 +284,7 @@ function StatsGraph({ title, data }) {
     datasets: [
       {
         type: 'bar',
-        label: ' Pellets (kg)',
+        label: ' Consommation (kg)',
         data: data.map(d => d.consumption_kg),
         backgroundColor: 'rgba(251, 146, 60, 0.8)',
         borderRadius: 4,
@@ -309,8 +339,8 @@ function StatsGraph({ title, data }) {
           label: (ctx) => {
             const val = ctx.raw;
             if (val === null || val === undefined) return null;
-            if (ctx.dataset.label.includes('Pellets')) return `${ctx.dataset.label}: ${val.toFixed(1)} kg`;
-            if (ctx.dataset.label.includes('Marche')) return `${ctx.dataset.label}: ${val.toFixed(1)} h`;
+            if (ctx.dataset.label.includes('Consommation')) return `${ctx.dataset.label}: ${val.toFixed(1)} kg`;
+            if (ctx.dataset.label.includes('Fonctionnement')) return `${ctx.dataset.label}: ${val.toFixed(1)} h`;
             return `${ctx.dataset.label}: ${val.toFixed(1)} °C`;
           }
         }
@@ -318,18 +348,18 @@ function StatsGraph({ title, data }) {
     },
     scales: {
       x: { grid: { display: false }, ticks: { font: { size: 9 } } },
-      // Axe Gauche : KG
+      // Axe Gauche : kg
       y: { 
         type: 'linear', 
         position: 'left', 
-        title: { display: true, text: 'kg', color: '#fb923c', font: {size: 9} },
+        title: { display: true, text: 'Consommation (kg)', color: '#fb923c', font: {size: 9} },
         grid: { display: false } 
       },
       // Axe Droite 1 : Heures
       y1: { 
         type: 'linear', 
         position: 'right', 
-        title: { display: true, text: 'h', color: '#3b82f6', font: {size: 9} },
+        title: { display: true, text: 'Fonctionnement (h)', color: '#3b82f6', font: {size: 9} },
         grid: { display: false }
       },
       // Axe Droite 2 : Degrés (sans grille, pour info)
@@ -337,7 +367,7 @@ function StatsGraph({ title, data }) {
         type: 'linear',
         position: 'right',
         display: true, // On l'affiche pour voir l'échelle
-        title: { display: true, text: '°C', color: '#f43f5e', font: {size: 9} },
+        title: { display: true, text: 'Température (°C)', color: '#f43f5e', font: {size: 9} },
         grid: { display: false },
         min: -10, // Plage fixe pour éviter que les températures écrasent le reste visuellement
         max: 35
