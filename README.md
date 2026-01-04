@@ -62,6 +62,7 @@ npm install -g firebase-tools
 npm create vite@latest . -- --template react
 npm install
 npm install firebase chart.js react-chartjs-2 lucide-react
+npm install date-fns chartjs-adapter-date-fns --save
 firebase login
 firebase init hosting
 * Choose : *Use an existing project*.
