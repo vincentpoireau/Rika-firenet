@@ -64,6 +64,16 @@ export default function App() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Gestion du Favicon et du Titre de la page
+  useEffect(() => {
+    document.title = appSettings.title;
+    const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+    link.type = 'image/jpeg';
+    link.rel = 'shortcut icon';
+    link.href = '/favicon.ico'; 
+    document.getElementsByTagName('head')[0].appendChild(link);
+  }, []);
+
   // Authentification
   useEffect(() => {
     signInAnonymously(auth).catch(err => setError(`Erreur Auth : ${err.message}`));
