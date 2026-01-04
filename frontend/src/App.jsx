@@ -29,6 +29,7 @@ import {
 import { Line, Bar } from 'react-chartjs-2';
 import { Thermometer, Target, Flame, RefreshCw, ShieldCheck, AlertCircle, CloudSun, Calendar } from 'lucide-react';
 import 'chartjs-adapter-date-fns';
+import { fr } from 'date-fns/locale';
 
 // Enregistrement des composants Chart.js
 ChartJS.register(
@@ -60,6 +61,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('24h'); 
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Authentification
   useEffect(() => {
@@ -73,7 +76,7 @@ export default function App() {
     if (!user) return;
     
     const stoveCollectionName = appSettings.stoveCollection || 'stove';
-    const q = query(collection(db, stoveCollectionName), orderBy('timestamp', 'desc'), limit(1500));
+    const q = query(collection(db, stoveCollectionName), orderBy('timestamp', 'desc'), limit(3000));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => {
@@ -126,7 +129,7 @@ export default function App() {
     };
 
     // Abonnement aux 3 collections
-    const unsubDay = subscribeToStats(appSettings.stove_days, setDailyStats, 60);    // 60 derniers jours
+    const unsubDay = subscribeToStats(appSettings.stove_days, setDailyStats, 100);    // 100 derniers jours
     const unsubWeek = subscribeToStats(appSettings.stove_weeks, setWeeklyStats, 52);  // 52 dernières semaines
     const unsubMonth = subscribeToStats(appSettings.stove_months, setMonthlyStats, 24); // 24 derniers mois
 
@@ -138,15 +141,48 @@ export default function App() {
   }, [user]);
 
   // Filtrage et Limites pour le Graphique 1
-  const filteredLogs = useMemo(() => {
-    if (timeRange === 'all' || logs.length === 0) return logs;
+   const filteredLogs = useMemo(() => {
+    if (logs.length === 0) return [];
+
+    // Si une date personnalisée est définie, elle est prioritaire
+    if (startDate || endDate) {
+      let start = startDate ? new Date(startDate) : new Date(0);
+      let end = endDate ? new Date(endDate) : new Date();
+      // On ajuste la fin de journée pour inclure toute la date de fin
+      if (endDate) end.setHours(23, 59, 59, 999);
+
+      return logs.filter(log => log.date >= start && log.date <= end);
+    }
+
+    // Sinon logique standard par boutons
+    if (timeRange === 'all') return logs;
     const now = new Date();
-    let startTime = new Date();
-    if (timeRange === '24h') startTime.setHours(now.getHours() - 24);
-    else if (timeRange === '7d') startTime.setDate(now.getDate() - 7);
-    else if (timeRange === '30d') startTime.setDate(now.getDate() - 30);
-    return logs.filter(log => log.date >= startTime);
-  }, [logs, timeRange]);
+    let startRange = new Date();
+    if (timeRange === '24h') startRange.setHours(now.getHours() - 24);
+    else if (timeRange === '7d') startRange.setDate(now.getDate() - 7);
+    else if (timeRange === '30d') startRange.setDate(now.getDate() - 30);
+    
+    return logs.filter(log => log.date >= startRange);
+  }, [logs, timeRange, startDate, endDate]);
+
+    // FILTRAGE DAILY STATS (Graphique 2)
+  const filteredDailyStats = useMemo(() => {
+    if (dailyStats.length === 0) return [];
+
+    // On applique le filtre de date personnalisé s'il existe
+    if (startDate || endDate) {
+      return dailyStats.filter(stat => {
+        // stat.id est au format YYYY-MM-DD, comparable string à string
+        // Si startDate n'est pas définie, on prend tout ce qui est avant endDate
+        if (startDate && stat.id < startDate) return false;
+        // Si endDate n'est pas définie, on prend tout ce qui est après startDate
+        if (endDate && stat.id > endDate) return false;
+        return true;
+      });
+    }
+
+    return dailyStats;
+  }, [dailyStats, startDate, endDate]);
 
   const tempLimits = useMemo(() => {
     if (filteredLogs.length === 0) return { min: 0, max: 30 };
@@ -158,6 +194,47 @@ export default function App() {
   }, [filteredLogs]);
 
   const latest = logs.length > 0 ? logs[logs.length - 1] : { temperature: 0, thermostat: 0, is_burning: false, date: new Date(), temperature_ext: null };
+  
+  // Gestion du reset des filtres date lors du clic sur un bouton range
+  const handleRangeClick = (range) => {
+    setTimeRange(range);
+    setStartDate('');
+    setEndDate('');
+  };
+
+  // Helper pour formater l'axe X selon le zoom
+  const xAxisOptions = useMemo(() => {
+    const isCustom = !!(startDate || endDate);
+    // Si plage personnalisée > 2 jours, ou bouton != 24h => affichage par jour
+    const showDays = isCustom || timeRange !== '24h';
+
+    return {
+      type: 'time',
+      time: {
+        unit: showDays ? 'day' : 'hour',
+        displayFormats: {
+          hour: 'HH:00',
+          day: 'dd/MM'
+        },
+        tooltipFormat: 'dd MMM HH:mm'
+      },
+      adapters: { date: { locale: fr } },
+      grid: {
+        color: (ctx) => {
+          if (!ctx.tick) return 'transparent';
+          const date = new Date(ctx.tick.value);
+          // Ligne forte à minuit, légère sinon
+          if (date.getHours() === 0 && date.getMinutes() === 0) return 'rgba(0,0,0,0.2)';
+          return showDays ? 'transparent' : 'rgba(0,0,0,0.05)';
+        }
+      },
+      ticks: {
+        autoSkip: true,
+        maxRotation: 0,
+        font: { size: 10, weight: 'bold' }
+      }
+    };
+  }, [timeRange, startDate, endDate]);
 
   if (loading) {
     return (
@@ -204,6 +281,24 @@ export default function App() {
               <h3 className="text-sm font-black flex items-center gap-2 text-slate-700 uppercase italic tracking-tight">
                 <Thermometer className="w-4 h-4 text-rose-500" /> Températures temps réel
               </h3>
+              <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                {/* Zone de sélection de dates */}
+                <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 pl-2 uppercase">Du</span>
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-white border-0 rounded-lg text-[11px] font-bold text-slate-600 px-2 py-1 focus:ring-2 focus:ring-orange-500 outline-none uppercase"
+                  />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Au</span>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-white border-0 rounded-lg text-[11px] font-bold text-slate-600 px-2 py-1 focus:ring-2 focus:ring-orange-500 outline-none uppercase"
+                  />
+                </div>
               <div className="flex items-center bg-slate-100 p-1 rounded-xl">
                 {[
                   { label: '24h', value: '24h' },
@@ -211,12 +306,18 @@ export default function App() {
                   { label: '30j', value: '30d' },
                   { label: 'Tout', value: 'all' }                
                 ].map((opt) => (
-                  <button key={opt} onClick={() => setTimeRange(opt.value)} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${timeRange === opt.value ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                    {opt.label}
+                    <button 
+                      key={opt.value}
+                      onClick={() => handleRangeClick(opt.value)}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${timeRange === opt.value && !startDate && !endDate ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      {opt.label}
                   </button>
                 ))}
               </div>
             </div>
+            </div>
+
             <div className="h-[400px]">
               <Line 
                 data={{
@@ -235,7 +336,8 @@ export default function App() {
                     x: {
                       type: 'time',
                       time: {
-                        unit: timeRange === '24h' ? 'hour' : 'day', // Unité de base : heure ou jour
+                        //unit: timeRange === '24h' ? 'hour' : 'day', // Unité de base : heure ou jour
+                        unit: (startDate || endDate) ? 'day' : (timeRange === '24h' ? 'hour' : 'day'),
                         stepSize: 1,  // Afficher une graduation toutes les 1 heure/jour
                         displayFormats: {
                           hour: 'HH:00', // Format d'affichage : "13:00"
@@ -245,7 +347,7 @@ export default function App() {
                       grid: { color: '#a0989cb2', lineWidth: 1.2 },
                       title: {
                         display: true,
-                        text: timeRange === '24h' ? 'Heure' : 'Jour'
+                        text: (startDate || endDate) ? 'Jour' : (timeRange === '24h' ? 'Heure' : 'Jour'),
                       },
                     }, 
                     y: { min: tempLimits.min, max: tempLimits.max, grid: { color: '#f1f5f9' },  title: { display: true, text: 'Température (°C)' } } },
@@ -267,7 +369,7 @@ export default function App() {
 
           {/* GRAPHIQUES DE BILAN (1 par ligne, 4 données, 3 échelles) */}
           <div className="grid grid-cols-1 gap-6">
-            <StatsGraph title="Bilan Quotidien" data={dailyStats} />
+            <StatsGraph title="Bilan Quotidien" data={filteredDailyStats} />
             <StatsGraph title="Bilan Hebdomadaire" data={weeklyStats} />
             <StatsGraph title="Bilan Mensuel" data={monthlyStats} />
           </div>
@@ -385,7 +487,7 @@ function StatsGraph({ title, data }) {
           <Bar data={chartData} options={options} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-xs text-slate-400 italic border-2 border-dashed border-slate-100 rounded-xl">
-            En attente de données agrégées...
+            Aucune donnée sur cette période
           </div>
         )}
       </div>
