@@ -412,29 +412,29 @@ function StatsGraph({ title, data }) {
         borderWidth: 2,
         tension: 0.3,
         pointRadius: 3,
-        order: 1,
+        order: 3,
         yAxisID: 'y1', // Axe Droite 1 : Heures
       },
       {
         type: 'line',
-        label: ' t° int. moy.',
+        label: ' T° int. moy.',
         data: data.map(d => d.avg_temp_int),
         borderColor: '#f43f5e',
         borderWidth: 1.5,
         borderDash: [4, 4],
         pointRadius: 3,
-        order: 2,
+        order: 1,
         yAxisID: 'y2', // Axe Droite 2 : Degrés
       },
       {
         type: 'line',
-        label: ' t° ext. moy.',
+        label: ' T° ext. moy.',
         data: data.map(d => d.avg_temp_ext),
         borderColor: '#94a3b8',
         borderWidth: 1.5,
         borderDash: [4, 4],
         pointRadius: 3,
-        order: 3,
+        order: 2,
         yAxisID: 'y2', // Axe Droite 2 : Degrés
       }
     ]
