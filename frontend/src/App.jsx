@@ -277,10 +277,10 @@ export default function App() {
 
         {/* Indicateurs Clés */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard title="Intérieur" value={`${latest.temperature.toFixed(1)}°C`} icon={Thermometer} color="rose" />
-          <StatCard title="Extérieur" value={latest.temperature_ext !== null ? `${latest.temperature_ext.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
-          <StatCard title="Consigne" value={`${latest.thermostat.toFixed(1)}°C`} icon={Target} color="slate" />
-          <StatCard title="En fonctionnement" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
+          <ModernCard title="Intérieur" value={`${latest.temperature.toFixed(1)}°C`} icon={Thermometer} color="rose" />
+          <ModernCard title="Extérieur" value={latest.temperature_ext !== null ? `${latest.temperature_ext.toFixed(1)}°C` : '--'} icon={CloudSun} color="blue" />
+          <ModernCard title="Consigne" value={`${latest.thermostat.toFixed(1)}°C`} icon={Target} color="slate" />
+          <ModernCard title="En fonctionnement" value={latest.is_burning ? "Oui" : "Non"} icon={Flame} color={latest.is_burning ? "orange" : "slate"} />
         </div>
 
         <div className="grid grid-cols-1 gap-8">
@@ -333,7 +333,16 @@ export default function App() {
                 data={{
                   labels: filteredLogs.map(l => l.date),
                   datasets: [
-                    { label: 'Intérieur', data: filteredLogs.map(l => l.temperature), borderColor: '#f43f5e', borderWidth: 3, tension: 0.4, pointRadius: 0 },
+                    { label: 'Intérieur', data: filteredLogs.map(l => l.temperature), borderColor: '#f43f5e', borderWidth: 3, tension: 0.4, pointRadius: 0,
+                      fill: true,
+                      backgroundColor: (context) => {
+                        const ctx = context.chart.ctx;
+                        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                        gradient.addColorStop(0, 'rgba(244, 63, 94, 0.1)');
+                        gradient.addColorStop(1, 'rgba(244, 63, 94, 0)');
+                        return gradient;
+                      }
+                    },
                     { label: 'Extérieur', data: filteredLogs.map(l => l.temperature_ext), borderColor: '#94a3b8', borderWidth: 2, backgroundColor: 'rgba(148, 163, 184, 0.1)', fill: true, tension: 0.4, pointRadius: 0 },
                     { label: 'Consigne', data: filteredLogs.map(l => l.thermostat), borderColor: '#3b82f6', borderDash: [5, 5], borderWidth: 1.5, tension: 0, pointRadius: 0 },
                     { label: 'Chauffe', data: filteredLogs.map(l => l.is_burning ? tempLimits.max : -50), borderColor: 'rgba(104, 52, 10, 0.08)', borderWidth: 2, backgroundColor: 'rgba(251, 146, 60, 0.08)', fill: 'start', pointRadius: 0, stepped: true, tension: 0 }
@@ -445,7 +454,7 @@ function StatsGraph({ title, data }) {
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: { 
-      legend: { position: 'top', labels: { font: { size: 9, weight: 'bold' }, usePointStyle: true, boxWidth: 6 } },
+      legend: { position: 'top', labels: { font: { size: 12, weight: 'bold' }, usePointStyle: true, boxWidth: 6 } },
       tooltip: { 
         callbacks: {
           label: (ctx) => {
@@ -459,19 +468,19 @@ function StatsGraph({ title, data }) {
       }
     },
     scales: {
-      x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+      x: { grid: { display: false }, ticks: { font: { size: 12 } } },
       // Axe Gauche : kg
       y: { 
         type: 'linear', 
         position: 'left', 
-        title: { display: true, text: 'Consommation (kg)', color: '#fb923c', font: {size: 9} },
+        title: { display: true, text: 'Consommation (kg)', color: '#fb923c', font: {size: 12} },
         grid: { display: false } 
       },
       // Axe Droite 1 : Heures
       y1: { 
         type: 'linear', 
         position: 'right', 
-        title: { display: true, text: 'Fonctionnement (h)', color: '#3b82f6', font: {size: 9} },
+        title: { display: true, text: 'Fonctionnement (h)', color: '#3b82f6', font: {size: 12} },
         grid: { display: false }
       },
       // Axe Droite 2 : Degrés (sans grille, pour info)
@@ -479,7 +488,7 @@ function StatsGraph({ title, data }) {
         type: 'linear',
         position: 'right',
         display: true, // On l'affiche pour voir l'échelle
-        title: { display: true, text: 'Température (°C)', color: '#f43f5e', font: {size: 9} },
+        title: { display: true, text: 'Température (°C)', color: '#f43f5e', font: {size: 12} },
         grid: { display: false },
         min: -10, // Plage fixe pour éviter que les températures écrasent le reste visuellement
         max: 35
@@ -489,7 +498,7 @@ function StatsGraph({ title, data }) {
 
   return (
     <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm h-[350px] flex flex-col">
-      <h3 className="text-[11px] font-black mb-4 flex items-center gap-2 text-slate-600 uppercase italic tracking-tight">
+      <h3 className="text-[13px] font-black mb-4 flex items-center gap-2 text-slate-600 uppercase italic tracking-tight">
         <Calendar className="w-3.5 h-3.5 text-orange-500" /> {title}
       </h3>
       <div className="flex-1 min-h-0">
@@ -515,6 +524,29 @@ function StatCard({ title, value, icon: Icon, color }) {
       </div>
       <div className={`p-3.5 rounded-2xl transition-transform group-hover:scale-105 ${colors[color] || colors.slate}`}>
         <Icon className="w-6 h-6" />
+      </div>
+    </div>
+  );
+}
+
+function ModernCard({ title, value, sub, icon: Icon, color }) {
+  const colors = {
+    rose: "bg-rose-500/10 text-rose-500",
+    blue: "bg-blue-500/10 text-blue-500",
+    orange: "bg-orange-500/10 text-orange-500",
+    slate: "bg-slate-500/10 text-slate-500"
+  };
+  return (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm group hover:scale-[1.02] transition-all cursor-default">
+      <div className="flex justify-between items-start mb-4">
+        <div className={`p-2.5 rounded-xl ${colors[color]}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <span className="text-[10px] font-black uppercase italic text-slate-300 group-hover:text-slate-400">{sub}</span>
+      </div>
+      <div>
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</p>
+        <p className="text-3xl font-black text-slate-800 tracking-tighter italic">{value}</p>
       </div>
     </div>
   );
