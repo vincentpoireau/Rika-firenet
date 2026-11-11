@@ -6,6 +6,8 @@ We use the [Google Firebase](https://firebase.google.com/) as data base, as well
 
 Code to read Rika firenet from https://github.com/iero/Rika-Stove/blob/master/rika.py.
 
+![screenshot](screenshot.jpg)
+
 ## Backend
 
 First step is to create a 'Firestore database' on Google Firebase.
