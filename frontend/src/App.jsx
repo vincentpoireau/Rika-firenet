@@ -118,8 +118,7 @@ export default function App() {
 
     // Fonction générique pour s'abonner aux collections agrégées
     const subscribeToStats = (collName, setter, limitCount) => {
-      // Pas de tri 'orderBy' pour éviter les erreurs d'index manquant, tri manuel ensuite
-      const q = query(collection(db, collName), limit(limitCount));
+      const q = query(collection(db, collName), orderBy('timestamp', 'desc'), limit(limitCount));
       
       return onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => {
