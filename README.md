@@ -4,6 +4,8 @@ Result can be seen at https://rika-domo.web.app/.
 
 We use the [Google Firebase](https://firebase.google.com/) as data base, as well as website hosting.
 
+Code to read Rika firenet from https://github.com/iero/Rika-Stove/blob/master/rika.py.
+
 ## Backend
 
 First step is to create a 'Firestore database' on Google Firebase.
