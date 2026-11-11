@@ -6,7 +6,7 @@ We use the [Google Firebase](https://firebase.google.com/) as data base, as well
 
 Code to read Rika firenet from https://github.com/iero/Rika-Stove/blob/master/rika.py.
 
-![screenshot](screenshot.jpg)
+![screenshot](screenshot.png)
 
 ## Backend
 
