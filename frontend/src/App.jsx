@@ -100,7 +100,9 @@ export default function App() {
           date: dateObj,
           temperature: Number(d.temperature) || 0,
           thermostat: Number(d.thermostat) || 0,
-          temperature_ext: Number(d.temperature_ext) || 0,
+          temperature_ext: d.temperature_ext == null || !Number.isFinite(Number(d.temperature_ext))
+            ? null
+            : Number(d.temperature_ext),
           is_burning: Boolean(d.is_burning)
         };
       }).reverse();
@@ -129,7 +131,9 @@ export default function App() {
               consumption_kg: Number(d.consumption_kg) || 0,
               consumption_h: Number(d.consumption_h) || 0,
               avg_temp_int: Number(d.avg_temp_int) || 0,
-              avg_temp_ext: Number(d.avg_temp_ext) || 0
+              avg_temp_ext: d.avg_temp_ext == null || !Number.isFinite(Number(d.avg_temp_ext))
+                ? null
+                : Number(d.avg_temp_ext)
             };
         });
         // Tri manuel par ID pour l'ordre chronologique
